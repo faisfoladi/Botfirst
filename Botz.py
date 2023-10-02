@@ -15,6 +15,9 @@ dispatcher = updater.dispatcher
 # تنظیمات لاگینگ
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
+# شناسه مدیران گروه (مشخصات خودتان را قرار دهید)
+admin_ids = {5948436434}
+
 # تابع برای خوش آمد گویی به کاربر جدید
 def welcome(update: Update, context: CallbackContext) -> None:
     user = update.message.from_user
@@ -27,31 +30,40 @@ def say_hello(update: Update, context: CallbackContext) -> None:
 
 # تابع برای اخراج کردن کاربر
 def kick_user(update: Update, context: CallbackContext) -> None:
-    if update.message.from_user.id == ADMIN_USER_ID:  # تغییر ADMIN_USER_ID به شناسه شما
-        user_id = context.args[0] if context.args else None
-        if user_id:
-            context.bot.kick_chat_member(chat_id=update.message.chat_id, user_id=user_id)
-            context.bot.send_message(chat_id=update.message.chat_id, text=f"کاربر {user_id} از گروه اخراج شد.")
+    user_id = update.message.from_user.id
+    if user_id in admin_ids:  # بررسی اینکه آیا کاربر مدیر است
+        user_to_kick_id = context.args[0] if context.args else None
+        if user_to_kick_id:
+            context.bot.kick_chat_member(chat_id=update.message.chat_id, user_id=user_to_kick_id)
+            context.bot.send_message(chat_id=update.message.chat_id, text=f"کاربر {user_to_kick_id} از گروه اخراج شد.")
+    else:
+        context.bot.send_message(chat_id=update.message.chat_id, text="شما مجوز انجام این عملیات را ندارید.")
 
 # تابع برای سکوت کاربر
 def mute_user(update: Update, context: CallbackContext) -> None:
-    if update.message.from_user.id == ADMIN_USER_ID:  # تغییر ADMIN_USER_ID به شناسه شما
-        user_id = context.args[0] if context.args else None
-        if user_id:
-            context.bot.restrict_chat_member(chat_id=update.message.chat_id, user_id=user_id, can_send_messages=False)
-            silent_users.add(user_id)
-            context.bot.send_message(chat_id=update.message.chat_id, text=f"کاربر {user_id} به حالت بی صدا درآمد.")
+    user_id = update.message.from_user.id
+    if user_id in admin_ids:  # بررسی اینکه آیا کاربر مدیر است
+        user_to_mute_id = context.args[0] if context.args else None
+        if user_to_mute_id:
+            context.bot.restrict_chat_member(chat_id=update.message.chat_id, user_id=user_to_mute_id, can_send_messages=False)
+            silent_users.add(user_to_mute_id)
+            context.bot.send_message(chat_id=update.message.chat_id, text=f"کاربر {user_to_mute_id} به حالت بی صدا درآمد.")
+    else:
+        context.bot.send_message(chat_id=update.message.chat_id, text="شما مجوز انجام این عملیات را ندارید.")
 
 # تابع برای آزاد کردن کاربر از اخراج و سکوت
 def unban_unmute_user(update: Update, context: CallbackContext) -> None:
-    if update.message.from_user.id == ADMIN_USER_ID:  # تغییر ADMIN_USER_ID به شناسه شما
-        user_id = context.args[0] if context.args else None
-        if user_id:
-            context.bot.unban_chat_member(chat_id=update.message.chat_id, user_id=user_id)
-            if user_id in silent_users:
-                context.bot.restrict_chat_member(chat_id=update.message.chat_id, user_id=user_id, can_send_messages=True)
-                silent_users.remove(user_id)
-            context.bot.send_message(chat_id=update.message.chat_id, text=f"کاربر {user_id} از اخراج و حالت بی صدا خارج شد.")
+    user_id = update.message.from_user.id
+    if user_id in admin_ids:  # بررسی اینکه آیا کاربر مدیر است
+        user_to_unban_unmute_id = context.args[0] if context.args else None
+        if user_to_unban_unmute_id:
+            context.bot.unban_chat_member(chat_id=update.message.chat_id, user_id=user_to_unban_unmute_id)
+            if user_to_unban_unmute_id in silent_users:
+                context.bot.restrict_chat_member(chat_id=update.message.chat_id, user_id=user_to_unban_unmute_id, can_send_messages=True)
+                silent_users.remove(user_to_unban_unmute_id)
+            context.bot.send_message(chat_id=update.message.chat_id, text=f"کاربر {user_to_unban_unmute_id} از اخراج و حالت بی صدا خارج شد.")
+    else:
+        context.bot.send_message(chat_id=update.message.chat_id, text="شما مجوز انجام این عملیات را ندارید.")
 
 # تابع برای پیام‌های بدون دستور
 def handle_messages(update: Update, context: CallbackContext) -> None:
@@ -61,21 +73,4 @@ def handle_messages(update: Update, context: CallbackContext) -> None:
 
 # تعریف دستورات
 welcome_handler = MessageHandler(Filters.status_update.new_chat_members, welcome)
-hello_handler = CommandHandler('سلام', say_hello)
-kick_handler = CommandHandler('بمور', kick_user, pass_args=True)
-mute_handler = CommandHandler('چوپ', mute_user, pass_args=True)
-unban_unmute_handler = CommandHandler('آزاد', unban_unmute_user, pass_args=True)
-messages_handler = MessageHandler(Filters.text & ~Filters.command, handle_messages)
-
-# افزودن دستورات به دیسپچر
-dispatcher.add_handler(welcome_handler)
-dispatcher.add_handler(hello_handler)
-dispatcher.add_handler(kick_handler)
-dispatcher.add_handler(mute_handler)
-dispatcher.add_handler(unban_unmute_handler)
-dispatcher.add_handler(messages_handler)
-
-# شروع ربات
-updater.start_polling()
-updater.idle()
-
+hello_handler = CommandHandler
