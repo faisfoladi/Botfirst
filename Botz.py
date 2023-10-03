@@ -1,76 +1,133 @@
 import logging
-from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import Updater, MessageHandler, Filters, CommandHandler, CallbackQueryHandler, CallbackContext
 
-# تنظیم توکن بات خود اینجا
-bot_token = '6023368456:AAHGUL4ZTfGAG7MK1CqF_0pCTryQaQMjmlU'
+# Set your bot token here
+BOT_TOKEN = 'YOUR_BOT_TOKEN'
 
-# تنظیم متغیر برای ذخیره وضعیت سکوت کاربران
-silent_users = set()
-
-# مقداردهی ربات با توکن
-updater = Updater(token=bot_token, use_context=True)
+# Initialize the Updater
+updater = Updater(token=BOT_TOKEN, use_context=True)
 dispatcher = updater.dispatcher
 
-# تنظیمات لاگینگ
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+# Enable logging (optional)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    level=logging.INFO)
 
-# شناسه مدیران گروه (مشخصات خودتان را قرار دهید)
-admin_ids = {5948436434}
+# Dictionary to track user warnings and mutes
+user_warnings = {}
+user_mutes = {}
 
-# تابع برای خوش آمد گویی به کاربر جدید
-def welcome(update: Update, context: CallbackContext) -> None:
+# Admins who have control over the bot
+admins = [123456789]  # Replace with your admin user IDs
+
+# Function to issue a warning and mute if necessary
+def warn_and_mute(update, user_id):
+    # Issue a warning
+    update.message.reply_text("Your message contains forbidden content. This is your first warning.")
+
+    # Check the number of warnings for the user
+    if user_warnings.get(user_id, 0) >= 2:
+        # If the user has received 3 warnings, mute them for 10 minutes (adjust as needed)
+        user_mutes[user_id] = True
+        update.message.reply_text("You have been muted for 10 minutes due to repeated warnings.")
+        
+        # Schedule unmute after 10 minutes
+        job_queue = updater.job_queue
+        job_queue.run_once(unmute_user, 600, context=update.message.chat_id, name=str(user_id))
+
+    else:
+        # Increment the warning count for the user
+        user_warnings[user_id] = user_warnings.get(user_id, 0) + 1
+
+# Function to unmute a user
+def unmute_user(context):
+    chat_id = context.job.context
+    user_id = int(context.job.name)
+    
+    # Remove the mute for the user
+    if user_mutes.get(user_id, False):
+        user_mutes[user_id] = False
+        context.bot.send_message(chat_id, f"User {user_id} has been unmuted.")
+
+# Function to respond to the /start command
+def start(update, context):
+    user_id = update.message.from_user.id
+    if user_id in admins:
+        # Admin control panel with buttons
+        keyboard = [[telegram.InlineKeyboardButton("Lock Bot", callback_data='lock_bot')],
+                    [telegram.InlineKeyboardButton("Unlock Bot", callback_data='unlock_bot')],
+                    [telegram.InlineKeyboardButton("View Warned Users", callback_data='view_warned_users')]]
+
+        reply_markup = telegram.InlineKeyboardMarkup(keyboard)
+        update.message.reply_text("Welcome, Admin! Use the buttons below:", reply_markup=reply_markup)
+    else:
+        update.message.reply_text("Welcome to the Bot! Send /info to get information about yourself.")
+
+# Function to get user info
+def user_info(update, context):
     user = update.message.from_user
-    context.bot.send_message(chat_id=update.message.chat_id, text=f"سلام {user.first_name}! خوش آمدید به گروه.")
+    user_id = user.id
+    username = user.username
+    first_name = user.first_name
+    last_name = user.last_name
 
-# تابع برای جواب سلام دادن
-def say_hello(update: Update, context: CallbackContext) -> None:
-    user = update.message.from_user
-    context.bot.send_message(chat_id=update.message.chat_id, text=f"سلام {user.first_name}!")
+    info_message = f"User ID: {user_id}\nUsername: {username}\nFirst Name: {first_name}\nLast Name: {last_name}"
 
-# تابع برای اخراج کردن کاربر
-def kick_user(update: Update, context: CallbackContext) -> None:
+    update.message.reply_text(info_message)
+
+# Function to handle text messages
+def handle_text(update, context):
     user_id = update.message.from_user.id
-    if user_id in admin_ids:  # بررسی اینکه آیا کاربر مدیر است
-        user_to_kick_id = context.args[0] if context.args else None
-        if user_to_kick_id:
-            context.bot.kick_chat_member(chat_id=update.message.chat_id, user_id=user_to_kick_id)
-            context.bot.send_message(chat_id=update.message.chat_id, text=f"کاربر {user_to_kick_id} از گروه اخراج شد.")
-    else:
-        context.bot.send_message(chat_id=update.message.chat_id, text="شما مجوز انجام این عملیات را ندارید.")
+    message_text = update.message.text.lower()  # Convert message text to lowercase for case-insensitive filtering
 
-# تابع برای سکوت کاربر
-def mute_user(update: Update, context: CallbackContext) -> None:
-    user_id = update.message.from_user.id
-    if user_id in admin_ids:  # بررسی اینکه آیا کاربر مدیر است
-        user_to_mute_id = context.args[0] if context.args else None
-        if user_to_mute_id:
-            context.bot.restrict_chat_member(chat_id=update.message.chat_id, user_id=user_to_mute_id, can_send_messages=False)
-            silent_users.add(user_to_mute_id)
-            context.bot.send_message(chat_id=update.message.chat_id, text=f"کاربر {user_to_mute_id} به حالت بی صدا درآمد.")
-    else:
-        context.bot.send_message(chat_id=update.message.chat_id, text="شما مجوز انجام این عملیات را ندارید.")
+    # Check for links using regex
+    if re.search(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', message_text):
+        # If a link is found in the message, warn and potentially mute the user
+        if not user_mutes.get(user_id, False):
+            warn_and_mute(update, user_id)
+        return
 
-# تابع برای آزاد کردن کاربر از اخراج و سکوت
-def unban_unmute_user(update: Update, context: CallbackContext) -> None:
-    user_id = update.message.from_user.id
-    if user_id in admin_ids:  # بررسی اینکه آیا کاربر مدیر است
-        user_to_unban_unmute_id = context.args[0] if context.args else None
-        if user_to_unban_unmute_id:
-            context.bot.unban_chat_member(chat_id=update.message.chat_id, user_id=user_to_unban_unmute_id)
-            if user_to_unban_unmute_id in silent_users:
-                context.bot.restrict_chat_member(chat_id=update.message.chat_id, user_id=user_to_unban_unmute_id, can_send_messages=True)
-                silent_users.remove(user_to_unban_unmute_id)
-            context.bot.send_message(chat_id=update.message.chat_id, text=f"کاربر {user_to_unban_unmute_id} از اخراج و حالت بی صدا خارج شد.")
-    else:
-        context.bot.send_message(chat_id=update.message.chat_id, text="شما مجوز انجام این عملیات را ندارید.")
+    # Implement message filtering for spam/forbidden content and respond accordingly
+    if "spam" in message_text or "forbidden" in message_text:
+        if not user_mutes.get(user_id, False):
+            warn_and_mute(update, user_id)
+        return
 
-# تابع برای پیام‌های بدون دستور
-def handle_messages(update: Update, context: CallbackContext) -> None:
-    user_id = update.message.from_user.id
-    if user_id in silent_users:
-        context.bot.send_message(chat_id=update.message.chat_id, text="شما به حالت بی صدا هستید.")
+# Function to handle button clicks
+def button_click(update, context):
+    query = update.callback_query
+    user_id = query.from_user.id
 
-# تعریف دستورات
-welcome_handler = MessageHandler(Filters.status_update.new_chat_members, welcome)
-hello_handler = CommandHandler
+    if query.data == 'lock_bot':
+        # Lock the bot functionality
+        if user_id in admins:
+            # Implement lock functionality here
+            pass
+    elif query.data == 'unlock_bot':
+        # Unlock the bot functionality
+        if user_id in admins:
+            # Implement unlock functionality here
+            pass
+    elif query.data == 'view_warned_users':
+        # View a list of warned users
+        if user_id in admins:
+            # Implement viewing warned users functionality here
+            pass
+
+# Add command handlers for admins and users
+start_handler = CommandHandler('start', start)
+info_handler = CommandHandler('info', user_info)
+dispatcher.add_handler(start_handler)
+dispatcher.add_handler(info_handler)
+
+# Add message handler with Filters.text & ~Filters.command for message filtering
+text_handler = MessageHandler(Filters.text & ~Filters.command, handle_text)
+dispatcher.add_handler(text_handler)
+
+# Add callback query handler for button clicks
+dispatcher.add_handler(CallbackQueryHandler(button_click))
+
+# Start the bot
+updater.start_polling()
+
+# Run the bot until you manually stop it
+updater.idle()
