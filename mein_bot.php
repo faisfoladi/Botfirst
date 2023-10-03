@@ -1,51 +1,76 @@
 <?php
-// تنظیمات
-$botToken = '6023368456:AAH1VbbHH7_6nW1lb2BoETdahGuhJufhU_o'; // توکن ربات خود را اینجا قرار دهید
-$chatId = '-1001615937977'; // آیدی گروه یا چت مورد نظرتان را اینجا قرار دهید
+// Telegram Bot-Token
+$botToken = '6023368456:AAH1VbbHH7_6nW1lb2BoETdahGuhJufhU_o';
 
-// اطلاعات مربوط به درخواست
-$update = json_decode(file_get_contents('php://input'), true);
-$message = $update['message'];
-$userId = $message['from']['id'];
-$chatType = $message['chat']['type'];
+// ID der Zielgruppe oder des Chats
+$chatId = '-1001615937977';
 
-// تابع ارسال پیام به تلگرام
-function sendMessage($chatId, $text) {
-    global $botToken;
-    $url = "https://api.telegram.org/bot$botToken/sendMessage";
-    $data = http_build_query(['chat_id' => $chatId, 'text' => $text]);
-    file_get_contents("$url?$data");
-}
+// URL für die Telegram Bot-API
+$telegramApiUrl = "https://api.telegram.org/bot$botToken";
 
-// دستور خوش آمد گویی به اعضای جدید
-if ($message['new_chat_members'] && $chatType === 'supergroup') {
-    foreach ($message['new_chat_members'] as $newMember) {
-        $welcomeMessage = "سلام {$newMember['first_name']} عزیز! خوش آمدید به گروه ما.";
-        sendMessage($chatId, $welcomeMessage);
+// Verarbeite den eingehenden Update von Telegram
+$update = json_decode(file_get_contents("php://input"), true);
+
+// Überprüfe, ob das Update Daten enthält
+if (isset($update['message'])) {
+    $message = $update['message'];
+    $userId = $message['from']['id'];
+
+    // Willkommensnachricht, wenn ein neuer Benutzer beitritt
+    if (isset($message['new_chat_members'])) {
+        foreach ($message['new_chat_members'] as $newMember) {
+            $welcomeMessage = "Willkommen, {$newMember['first_name']}!";
+            sendMessage($chatId, $welcomeMessage);
+        }
+    }
+
+    // Hallo-Nachricht beantworten
+    if (isset($message['text']) && strtolower($message['text']) == 'hallo') {
+        $response = "Hallo, {$message['from']['first_name']}!";
+        sendMessage($chatId, $response);
+    }
+
+    // Sperrung eines Benutzers
+    if (isset($message['text']) && strtolower($message['text']) == '/sperren' && $userId == 'DEINE_BENUTZER_ID') {
+        $userToBanId = $message['reply_to_message']['from']['id'];
+        kickUser($chatId, $userToBanId);
+    }
+
+    // Stummschaltung eines Benutzers
+    if (isset($message['text']) && strtolower($message['text']) == '/stumm' && $userId == 'DEINE_BENUTZER_ID') {
+        $userToMuteId = $message['reply_to_message']['from']['id'];
+        muteUser($chatId, $userToMuteId);
     }
 }
 
-// دستور افزودن ادمین
-if ($message['text'] === 'اضافه کردن ادمین' && $userId === YOUR_ADMIN_USER_ID) {
-    // در اینجا کد برای اضافه کردن ادمین را اضافه کنید
-    sendMessage($chatId, 'کاربر به عنوان ادمین افزوده شد.');
+// Funktion zum Senden von Nachrichten
+function sendMessage($chatId, $text) {
+    global $telegramApiUrl;
+    $params = [
+        'chat_id' => $chatId,
+        'text' => $text,
+    ];
+    file_get_contents("$telegramApiUrl/sendMessage?" . http_build_query($params));
 }
 
-// دستور اخراج کاربر
-if ($message['text'] === 'اخراج کاربر' && $userId === YOUR_ADMIN_USER_ID) {
-    // در اینجا کد برای اخراج کاربر را اضافه کنید
-    sendMessage($chatId, 'کاربر از گروه اخراج شد.');
+// Funktion zum Sperren eines Benutzers
+function kickUser($chatId, $userId) {
+    global $telegramApiUrl;
+    $params = [
+        'chat_id' => $chatId,
+        'user_id' => $userId,
+    ];
+    file_get_contents("$telegramApiUrl/kickChatMember?" . http_build_query($params));
 }
 
-// دستور بی صدا کردن کاربر
-if ($message['text'] === 'بی صدا کردن کاربر' && $userId === YOUR_ADMIN_USER_ID) {
-    // در اینجا کد برای بی صدا کردن کاربر را اضافه کنید
-    sendMessage($chatId, 'کاربر به حالت بی صدا درآمد.');
-}
-
-// دستور آزاد کردن کاربر از بی صدا و اخراج
-if ($message['text'] === 'آزاد کردن کاربر' && $userId === YOUR_ADMIN_USER_ID) {
-    // در اینجا کد برای آزاد کردن کاربر از بی صدا و اخراج را اضافه کنید
-    sendMessage($chatId, 'کاربر از اخراج و حالت بی صدا خارج شد.');
+// Funktion zum Stummschalten eines Benutzers
+function muteUser($chatId, $userId) {
+    global $telegramApiUrl;
+    $params = [
+        'chat_id' => $chatId,
+        'user_id' => $userId,
+        'until_date' => strtotime('+1 day'), // Stummschaltung für 1 Tag
+    ];
+    file_get_contents("$telegramApiUrl/restrictChatMember?" . http_build_query($params));
 }
 ?>
