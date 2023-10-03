@@ -2,7 +2,7 @@ import logging
 from telegram.ext import Updater, MessageHandler, Filters, CommandHandler, CallbackQueryHandler, CallbackContext
 
 # Set your bot token here
-BOT_TOKEN = 'YOUR_BOT_TOKEN'
+BOT_TOKEN = '6023368456:AAH1VbbHH7_6nW1lb2BoETdahGuhJufhU_o'
 
 # Initialize the Updater
 updater = Updater(token=BOT_TOKEN, use_context=True)
@@ -17,7 +17,7 @@ user_warnings = {}
 user_mutes = {}
 
 # Admins who have control over the bot
-admins = [123456789]  # Replace with your admin user IDs
+admins = [5418746418]  # Replace with your admin user IDs
 
 # Function to issue a warning and mute if necessary
 def warn_and_mute(update, user_id):
@@ -78,13 +78,6 @@ def user_info(update, context):
 def handle_text(update, context):
     user_id = update.message.from_user.id
     message_text = update.message.text.lower()  # Convert message text to lowercase for case-insensitive filtering
-
-    # Check for links using regex
-    if re.search(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', message_text):
-        # If a link is found in the message, warn and potentially mute the user
-        if not user_mutes.get(user_id, False):
-            warn_and_mute(update, user_id)
-        return
 
     # Implement message filtering for spam/forbidden content and respond accordingly
     if "spam" in message_text or "forbidden" in message_text:
